@@ -1,0 +1,13 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+websockets = "==12.0"
+ujson = "==5.9.0"
+
+[dev-packages]
+
+[requires]
+python_version = "3.9"
