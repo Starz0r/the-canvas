@@ -1,1 +1,0 @@
-web: pipenv run python ./src/server/main.py
