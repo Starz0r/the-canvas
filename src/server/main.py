@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, Final, List, Union
 
 import ujson
-from websockets import Headers, WebSocketServerProtocol
+from websockets import Headers, WebSocketServer, WebSocketServerProtocol
 
 
 @dataclass
@@ -31,7 +31,7 @@ class ClientVersion:
 
 EVLOOP: Final[asyncio.AbstractEventLoop] = asyncio.new_event_loop()
 RUNNING: Final[asyncio.Future]
-WS_SERV: Final[websockets.WebsocketServer]
+WS_SERV: Final[WebSocketServer]
 OBJ_LIST: List[Placement] = []
 REQUIRED_CLIENT_VERSION: Final[int] = 1000
 
