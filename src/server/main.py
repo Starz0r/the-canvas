@@ -97,6 +97,7 @@ async def start_echo_server():
     async with serve(
         handle_user_commands, "localhost", 8765, process_request=health_check
     ) as server:
+        print("The Canvas is running.")
         await RUNNING
 
 
