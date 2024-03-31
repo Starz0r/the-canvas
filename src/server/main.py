@@ -1,4 +1,5 @@
 import asyncio
+import http
 import os
 import sys
 import time
@@ -6,7 +7,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, Final, List, Union
 
 import ujson
-from websockets import WebSocketServerProtocol
+from websockets import Headers, WebSocketServerProtocol
 
 
 @dataclass
@@ -83,12 +84,19 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
     # RUNNING.set_result(None)
 
 
+async def health_check(path: str, request_headers: Headers):
+    if path == "/healthz":
+        return http.HTTPStatus.OK, [], b"OK\n"
+
+
 async def start_echo_server():
     from websockets import serve
 
     global RUNNING
     RUNNING = asyncio.Future()
-    async with serve(handle_user_commands, "localhost", 8765) as server:
+    async with serve(
+        handle_user_commands, "localhost", 8765, process_request=health_check
+    ) as server:
         await RUNNING
 
 
