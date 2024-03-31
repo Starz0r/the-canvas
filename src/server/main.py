@@ -95,7 +95,7 @@ async def start_echo_server():
     global RUNNING
     RUNNING = asyncio.Future()
     async with serve(
-        handle_user_commands, "localhost", 8765, process_request=health_check
+        handle_user_commands, "0.0.0.0", 8765, process_request=health_check
     ) as server:
         print("The Canvas is running.")
         await RUNNING
