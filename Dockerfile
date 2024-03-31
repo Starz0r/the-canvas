@@ -10,7 +10,7 @@ WORKDIR /app
 RUN pip install pipenv
 RUN pipenv install --system --deploy
 
-HEALTHCHECK CMD curl --fail http://localhost/healthz || exit 1
+HEALTHCHECK CMD curl --fail http://localhost:8765/healthz || exit 1
 
 ENTRYPOINT [ "python", "./src/server/main.py" ]
 CMD []
