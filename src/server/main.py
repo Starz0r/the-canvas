@@ -72,8 +72,9 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
             print(ujson.dumps({"cmd": "placementaccepted", **asdict(struct)}))
 
             await ws.send(ujson.dumps({"cmd": "placementaccepted"}))
-            await broadcast(
-                WS_SERV.sockets, ujson.dumps({"cmd": "newplacement", **asdict(struct)})
+            broadcast(
+                WS_SERV.websockets,
+                ujson.dumps({"cmd": "newplacement", **asdict(struct)}),
             )
         elif isinstance(struct, ClientVersion):
             if not struct.version == REQUIRED_CLIENT_VERSION:
