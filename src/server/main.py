@@ -31,11 +31,14 @@ class ClientVersion:
 
 EVLOOP: Final[asyncio.AbstractEventLoop] = asyncio.new_event_loop()
 RUNNING: Final[asyncio.Future]
+WS_SERV: Final[websockets.WebsocketServer]
 OBJ_LIST: List[Placement] = []
 REQUIRED_CLIENT_VERSION: Final[int] = 1000
 
 
-async def extract_struct_from_msg(payload: Dict[Any, Any]) -> Union[Placement]:
+async def extract_struct_from_msg(
+    payload: Dict[Any, Any],
+) -> Union[Placement, ClientVersion]:
     cmd = payload.get("cmd")
     if not cmd:
         # TODO: log here
@@ -59,7 +62,7 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
             # TODO: eat action count from user or drop if they have none
             # TODO: check if there is a placement at the position already
             # TODO: drop the removed, created_by, date_created field if defined
-            struct.cmd = "placementaccepted"
+            struct.cmd = "newplacement"
             struct.eid = int.from_bytes(os.urandom(8), byteorder="little", signed=False)
             struct.date_created = round(time.time() * 1000)
             # TODO: created_by
@@ -68,7 +71,10 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
 
             print(ujson.dumps({"cmd": "placementaccepted", **asdict(struct)}))
 
-            await ws.send(ujson.dumps({"cmd": "placementaccepted", **asdict(struct)}))
+            await ws.send(ujson.dumps({"cmd": "placementaccepted"}))
+            await websockets.broadcast(
+                WS_SERV.sockets, {"cmd": "newplacement", **asdict(struct)}
+            )
         elif isinstance(struct, ClientVersion):
             if not struct.version == REQUIRED_CLIENT_VERSION:
                 await ws.send(
@@ -92,11 +98,11 @@ async def health_check(path: str, request_headers: Headers):
 async def start_echo_server():
     from websockets import serve
 
-    global RUNNING
+    global RUNNING, WS_SERV
     RUNNING = asyncio.Future()
     async with serve(
         handle_user_commands, "0.0.0.0", 8765, process_request=health_check
-    ) as server:
+    ) as WS_SERV:
         print("The Canvas is running.")
         await RUNNING
 
