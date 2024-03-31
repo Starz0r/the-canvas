@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, Final, List, Union
 
 import ujson
-from websockets import Headers, WebSocketServer, WebSocketServerProtocol
+from websockets import Headers, WebSocketServer, WebSocketServerProtocol, broadcast
 
 
 @dataclass
@@ -72,8 +72,8 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
             print(ujson.dumps({"cmd": "placementaccepted", **asdict(struct)}))
 
             await ws.send(ujson.dumps({"cmd": "placementaccepted"}))
-            await websockets.broadcast(
-                WS_SERV.sockets, {"cmd": "newplacement", **asdict(struct)}
+            await broadcast(
+                WS_SERV.sockets, ujson.dumps({"cmd": "newplacement", **asdict(struct)})
             )
         elif isinstance(struct, ClientVersion):
             if not struct.version == REQUIRED_CLIENT_VERSION:
