@@ -93,6 +93,7 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
             )
         )
         await ws.close()
+        return
     CONNECTED_REMOTES.add(remote_addr)
 
     # sync client up to date
