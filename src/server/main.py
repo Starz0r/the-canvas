@@ -7,7 +7,9 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Final, Union
 
+import aiofiles
 import ujson
+from minio import Minio
 from websockets import Headers, WebSocketServer, WebSocketServerProtocol, broadcast
 
 
@@ -100,11 +102,11 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
         deficit_time += now_time - last_msg_time
         last_msg_time = time.time()
 
-        while deficit_time >= 5:
+        while deficit_time >= 15:
             session.actions += 1
-            if session.actions >= 5:
+            if session.actions >= 15:
                 deficit_time = 0
-            deficit_time -= 5
+            deficit_time -= 15
 
         if type(msg) is bytes:
             # TODO: log here
@@ -185,9 +187,31 @@ async def run_forever(corofn):
         await corofn()
 
 
+async def perform_backup():
+    while True:
+        client = Minio(
+            endpoint="sfo3.digitaloceanspaces.com",
+            region="sfo3",
+            access_key=os.getenv("S3_ACCESS_KEY"),
+            secret_key=os.getenv("S3_SECRET_KEY"),
+            secure=True,
+        )
+
+        epoch = round(time.time() * 1000)
+        async with aiofiles.open(
+            file=f"{epoch}.json", mode="a+", encoding="utf-8"
+        ) as f:
+            await f.write(ujson.dumps(OBJ_LIST))
+            await f.flush()
+            client.fput_object("the-canvas", f"{epoch}.json", f.name)
+
+        await asyncio.sleep(1800)
+
+
 async def main():
     server_task = asyncio.create_task(start_echo_server())
-    await asyncio.gather(server_task)
+    backup_task = asyncio.create_task(perform_backup())
+    await asyncio.gather(server_task, backup_task)
 
 
 if __name__ == "__main__":
