@@ -81,7 +81,7 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
 
     forwarded_addr = ws.request_headers.get("X-Forwarded-For")
     if remote_addr != forwarded_addr and forwarded_addr is not None:
-        remote_addr = forwarded_addr
+        remote_addr = forwarded_addr.split(",")[0]
 
     print(remote_addr)
 
