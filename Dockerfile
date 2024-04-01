@@ -1,7 +1,7 @@
 FROM python:3.9.5-slim-buster
 
 RUN apt-get update
-RUN apt-get install curl -y
+RUN apt-get install curl ca-certificates -y
 
 RUN mkdir /app/
 ADD . /app/
