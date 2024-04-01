@@ -83,6 +83,8 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
     if remote_addr != forwarded_addr and forwarded_addr is not None:
         remote_addr = forwarded_addr
 
+    print(remote_addr)
+
     if remote_addr in CONNECTED_REMOTES:
         await ws.send(
             ujson.dumps(
