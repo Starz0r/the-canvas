@@ -198,14 +198,19 @@ async def perform_backup():
         )
 
         epoch = round(time.time() * 1000)
+        fname: str
         async with aiofiles.open(
-            file=f"{epoch}.json", mode="a+", encoding="utf-8"
+            file=f"{epoch}.json", mode="w+", encoding="utf-8"
         ) as f:
-            await f.write(ujson.dumps(OBJ_LIST))
+            tmp_list: List[Placement] = []
+            for item in OBJ_LIST.values():
+                tmp_list.append(asdict(item))
+            await f.write(ujson.dumps(tmp_list))
             await f.flush()
-            client.fput_object("the-canvas", f"{epoch}.json", f.name)
+            fname = f.name
+        client.fput_object("the-canvas", f"{epoch}.json", fname)
 
-        os.remove(f.name)
+        os.remove(fname)
 
         await asyncio.sleep(1800)
 
