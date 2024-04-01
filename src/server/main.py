@@ -5,14 +5,13 @@ import os
 import sys
 import time
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Final, List, Optional, Union
+from typing import Any, Dict, Final, List, Optional, Set, Union
 
 import aiofiles
 import ujson
 from minio import Minio
 from minio.datatypes import Object
-from websockets import (Headers, WebSocketServer, WebSocketServerProtocol,
-                        broadcast)
+from websockets import Headers, WebSocketServer, WebSocketServerProtocol, broadcast
 
 
 @dataclass
@@ -44,6 +43,7 @@ class ClientVersion:
 class Session:
     remote_addr: str = "0.0.0.0"
     actions: int = 1
+    removed: int = 0
 
 
 EVLOOP: Final[asyncio.AbstractEventLoop] = asyncio.new_event_loop()
@@ -51,6 +51,7 @@ RUNNING: Final[asyncio.Future]
 WS_SERV: Final[WebSocketServer]
 OBJ_LIST: Dict[str, Placement] = {}
 SESSION_LIST: Dict[str, Session] = {}
+CONNECTED_REMOTES: Set[str] = set()
 REQUIRED_CLIENT_VERSION: Final[int] = 1000
 
 
@@ -82,6 +83,18 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
     if remote_addr != forwarded_addr and forwarded_addr is not None:
         remote_addr = forwarded_addr
 
+    if remote_addr in CONNECTED_REMOTES:
+        await ws.send(
+            ujson.dumps(
+                {
+                    "cmd": "connectionclosed",
+                    "reason": "Session ticket did not match",
+                }
+            )
+        )
+        await ws.close()
+    CONNECTED_REMOTES.add(remote_addr)
+
     # sync client up to date
     for placement in OBJ_LIST.values():
         await ws.send(ujson.dumps({"cmd": "newplacement", **asdict(placement)}))
@@ -96,74 +109,79 @@ async def handle_user_commands(ws: WebSocketServerProtocol):
     deficit_time = 0.0
 
     # handle commands
-    async for msg in ws:
-        session = SESSION_LIST.pop(remote_addr)
+    try:
+        async for msg in ws:
+            session = SESSION_LIST.pop(remote_addr)
 
-        # calculate action bank
-        now_time = time.time()
-        deficit_time += now_time - last_msg_time
-        last_msg_time = time.time()
+            # calculate action bank
+            now_time = time.time()
+            deficit_time += now_time - last_msg_time
+            last_msg_time = time.time()
 
-        while deficit_time >= 15:
-            session.actions += 1
-            if session.actions >= 15:
-                deficit_time = 0
-            deficit_time -= 15
+            while deficit_time >= 15:
+                session.actions += 1
+                if session.actions >= 15:
+                    deficit_time = 0
+                deficit_time -= 15
 
-        if type(msg) is bytes:
-            # TODO: log here
-            return
+            if type(msg) is bytes:
+                # TODO: log here
+                return
 
-        payload = ujson.loads(msg)
-        struct = await extract_struct_from_msg(payload)
+            payload = ujson.loads(msg)
+            struct = await extract_struct_from_msg(payload)
 
-        if isinstance(struct, Placement):
-            if session.actions < 1:
-                SESSION_LIST.update([(remote_addr, session)])
-                continue
-            session.actions -= 1
-            # TODO: check if there is a placement at the position already
-            # TODO: drop the removed, created_by, date_created field if defined
-            struct.cmd = "newplacement"
-            struct.eid = base64.urlsafe_b64encode(os.urandom(16)).decode("utf-8")
-            struct.date_created = round(time.time() * 1000)
-            # TODO: created_by
+            if isinstance(struct, Placement):
+                if session.actions < 1:
+                    SESSION_LIST.update([(remote_addr, session)])
+                    continue
+                session.actions -= 1
+                # TODO: check if there is a placement at the position already
+                # TODO: drop the removed, created_by, date_created field if defined
+                struct.cmd = "newplacement"
+                struct.eid = base64.urlsafe_b64encode(os.urandom(16)).decode("utf-8")
+                struct.date_created = round(time.time() * 1000)
+                # TODO: created_by
 
-            OBJ_LIST.update([(struct.eid, struct)])
+                OBJ_LIST.update([(struct.eid, struct)])
 
-            print(ujson.dumps({"cmd": "placementaccepted", **asdict(struct)}))
+                print(ujson.dumps({"cmd": "placementaccepted", **asdict(struct)}))
 
-            await ws.send(ujson.dumps({"cmd": "placementaccepted"}))
-            broadcast(
-                WS_SERV.websockets,
-                ujson.dumps({"cmd": "newplacement", **asdict(struct)}),
-            )
-        elif isinstance(struct, ClientVersion):
-            if not struct.version == REQUIRED_CLIENT_VERSION:
-                await ws.send(
-                    ujson.dumps(
-                        {
-                            "cmd": "connectionclosed",
-                            "reason": "Client is outdated and does not meet the minimum requirements, please refresh!",
-                        }
-                    )
+                await ws.send(ujson.dumps({"cmd": "placementaccepted"}))
+                broadcast(
+                    WS_SERV.websockets,
+                    ujson.dumps({"cmd": "newplacement", **asdict(struct)}),
                 )
-                await ws.close()
-        elif isinstance(struct, PlacementRemoved):
-            if session.actions < 1:
-                SESSION_LIST.update([(remote_addr, session)])
-                continue
-            struct.cmd = "rmplacement"
-            OBJ_LIST.pop(struct.eid)
+            elif isinstance(struct, ClientVersion):
+                if not struct.version == REQUIRED_CLIENT_VERSION:
+                    await ws.send(
+                        ujson.dumps(
+                            {
+                                "cmd": "connectionclosed",
+                                "reason": "Client is outdated and does not meet the minimum requirements, please refresh!",
+                            }
+                        )
+                    )
+                    await ws.close()
+            elif isinstance(struct, PlacementRemoved):
+                if session.actions < 1:
+                    SESSION_LIST.update([(remote_addr, session)])
+                    continue
+                struct.cmd = "rmplacement"
+                OBJ_LIST.pop(struct.eid)
 
-            await ws.send(ujson.dumps({"cmd": "placementaccepted"}))
-            broadcast(
-                WS_SERV.websockets,
-                ujson.dumps({"cmd": "rmplacement", **asdict(struct)}),
-            )
+                await ws.send(ujson.dumps({"cmd": "placementaccepted"}))
+                broadcast(
+                    WS_SERV.websockets,
+                    ujson.dumps({"cmd": "rmplacement", **asdict(struct)}),
+                )
 
-        SESSION_LIST.update([(remote_addr, session)])
-
+            SESSION_LIST.update([(remote_addr, session)])
+    except Exception as e:
+        print("An error occured on a socket")
+        print(e)
+    finally:
+        CONNECTED_REMOTES.discard(remote_addr)
     # RUNNING.set_result(None)
 
 
@@ -241,9 +259,6 @@ async def restore_from_previous_backup():
         placements: List[Dict[str, Any]] = ujson.loads(json)
         for placement in placements:
             OBJ_LIST.update([(placement["eid"], Placement(**placement))])
-
-        for v in OBJ_LIST.values():
-            print(v)
 
     os.remove("latest.json")
 
