@@ -11,7 +11,8 @@ import aiofiles
 import ujson
 from minio import Minio
 from minio.datatypes import Object
-from websockets import Headers, WebSocketServer, WebSocketServerProtocol, broadcast
+from websockets import (Headers, WebSocketServer, WebSocketServerProtocol,
+                        broadcast)
 
 
 @dataclass
@@ -213,7 +214,7 @@ async def perform_backup():
 
         os.remove(fname)
 
-        await asyncio.sleep(1800)
+        await asyncio.sleep(600)
 
 
 async def restore_from_previous_backup():
