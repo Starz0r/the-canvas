@@ -5,11 +5,12 @@ import os
 import sys
 import time
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Final, Union
+from typing import Any, Dict, Final, List, Optional, Union
 
 import aiofiles
 import ujson
 from minio import Minio
+from minio.datatypes import Object
 from websockets import Headers, WebSocketServer, WebSocketServerProtocol, broadcast
 
 
@@ -215,7 +216,40 @@ async def perform_backup():
         await asyncio.sleep(1800)
 
 
+async def restore_from_previous_backup():
+    client = Minio(
+        endpoint="sfo3.digitaloceanspaces.com",
+        region="sfo3",
+        access_key=os.getenv("S3_ACCESS_KEY"),
+        secret_key=os.getenv("S3_SECRET_KEY"),
+        secure=True,
+    )
+
+    objs = client.list_objects("the-canvas")
+    latest: Optional[Object] = None
+    for obj in objs:
+        if latest is None:
+            latest = obj
+        else:
+            if latest.last_modified < obj.last_modified:
+                latest = obj
+    client.fget_object("the-canvas", latest.object_name, "latest.json")
+
+    async with aiofiles.open(file="latest.json", mode="r", encoding="utf-8") as f:
+        json = await f.read()
+        placements: List[Dict[str, Any]] = ujson.loads(json)
+        for placement in placements:
+            OBJ_LIST.update([(placement["eid"], Placement(**placement))])
+
+        for v in OBJ_LIST.values():
+            print(v)
+
+    os.remove("latest.json")
+
+
 async def main():
+    await asyncio.create_task(restore_from_previous_backup())
+
     server_task = asyncio.create_task(start_echo_server())
     backup_task = asyncio.create_task(perform_backup())
     await asyncio.gather(server_task, backup_task)
