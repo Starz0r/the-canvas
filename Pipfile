@@ -6,6 +6,8 @@ name = "pypi"
 [packages]
 websockets = "==12.0"
 ujson = "==5.9.0"
+minio = "==7.2.5"
+aiofiles = "==23.2.1"
 
 [dev-packages]
 

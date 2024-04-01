@@ -205,6 +205,8 @@ async def perform_backup():
             await f.flush()
             client.fput_object("the-canvas", f"{epoch}.json", f.name)
 
+        os.remove(f.name)
+
         await asyncio.sleep(1800)
 
 
