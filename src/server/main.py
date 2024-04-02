@@ -70,6 +70,21 @@ async def extract_struct_from_msg(
         return PlacementRemoved(**payload)
 
 
+async def thanks_for_playing(ws: WebSocketServerProtocol):
+    for placement in OBJ_LIST.values():
+        await ws.send(ujson.dumps({"cmd": "newplacement", **asdict(placement)}))
+
+    await ws.send(
+        ujson.dumps(
+            {
+                "cmd": "connectionclosed",
+                "reason": "The Canvas is closed, thanks for playing!",
+            }
+        )
+    )
+    return await ws.close()
+
+
 async def handle_user_commands(ws: WebSocketServerProtocol):
     # get canonical address
     remote_addr = ws.remote_address[0]
@@ -199,7 +214,7 @@ async def start_echo_server():
     global RUNNING, WS_SERV
     RUNNING = asyncio.Future()
     async with serve(
-        handle_user_commands, "0.0.0.0", 8765, process_request=health_check
+        thanks_for_playing, "0.0.0.0", 8765, process_request=health_check
     ) as WS_SERV:
         print("The Canvas is running.")
         await RUNNING
